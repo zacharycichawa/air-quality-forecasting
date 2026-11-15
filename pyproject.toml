@@ -21,7 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "respx>=0.21", "ruff>=0.6"]
 analysis = ["matplotlib>=3.8", "seaborn>=0.13", "jupyter>=1.0", "jupytext>=1.16", "nbconvert>=7"]
-ml = ["scikit-learn>=1.5", "lightgbm>=4.3", "shap>=0.45", "joblib>=1.4"]
+ml = ["scikit-learn>=1.5", "lightgbm>=4.3", "shap>=0.45", "joblib>=1.4", "pyarrow>=16"]
 
 [project.scripts]
 airquality = "airquality.cli:app"

@@ -252,5 +252,18 @@ def weather_forecast(ctx: typer.Context) -> None:
     load_weather_forecast(_engine(ctx))  # logs its own ingestion_run
 
 
+@app.command("train-forecast")
+def train_forecast(
+    ctx: typer.Context,
+    horizon: Annotated[int, typer.Option(help="Forecast horizon in hours.")] = 24,
+    weather: Annotated[bool, typer.Option(help="Use target-hour weather features.")] = False,
+    refresh_cache: Annotated[bool, typer.Option(help="Re-extract data from PostgreSQL.")] = False,
+) -> None:
+    """Train and evaluate the PM2.5 forecaster (baselines + LightGBM) for one horizon."""
+    from airquality.forecast.train import run_experiment
+
+    run_experiment(_engine(ctx), horizon, weather, refresh_cache=refresh_cache)
+
+
 if __name__ == "__main__":
     app()

@@ -4,8 +4,8 @@ End-to-end data project on Polish air quality: an automated pipeline that loads 
 GIOŚ measurements and Open-Meteo weather into PostgreSQL, with PM2.5 forecasting,
 a BI dashboard and an LLM assistant planned on top.
 
-> **Status:** work in progress. Data pipeline and exploratory analysis are done;
-> forecasting, dashboard and assistant are next.
+> **Status:** work in progress. Data pipeline, exploratory analysis and
+> baseline forecasting are done; weather features, dashboard and assistant are next.
 
 ## Key findings so far ([full analysis notebook](notebooks/01_eda.ipynb))
 
@@ -19,6 +19,31 @@ a BI dashboard and an LLM assistant planned on top.
 - **Kraków improved the most among large cities:** it went from 4th worst (2019) to 18th
   of 72 (2025) after banning solid-fuel heating.
 
+## Forecasting results ([notebook](notebooks/02_forecasting.ipynb))
+
+Hourly PM2.5 forecast at each station, 24 h and 48 h ahead (LightGBM, one model per
+horizon). Trained on 2019–2023, tuned on 2024, **tested once on 2025**. Mean absolute
+error in µg/m³, without weather features:
+
+| Model | 24 h ahead | 48 h ahead |
+|---|---|---|
+| Persistence (same as now) | 7.72 | 8.86 |
+| Mean of last 24 h | 7.92 | 8.68 |
+| Climatology (station × month × hour) | 8.16 | 8.29 |
+| **LightGBM** | **6.55** (−15 %) | **7.13** (−20 %) |
+
+- **Early warning:** a separate classifier for high-pollution hours (> 50 µg/m³)
+  catches about half of them, beating the "bad now → bad tomorrow" rule (F1 0.40 vs
+  0.35 at 24 h). ROC-AUC is 0.93.
+- **Known weakness:** during severe smog (> 50 µg/m³) the point forecast under-predicts
+  and is worse than persistence. Pollution history alone can't anticipate an
+  inversion, so weather features are next.
+- **Engineering:**
+  - No-leakage features, verified by a unit test that corrupts future data.
+  - Boundary-safe time splits.
+  - Hyper-parameters and target transform chosen on validation only.
+
+![Smog episode forecast](reports/figures/forecast_episode.png)
 ![Daily cycle of PM2.5](reports/figures/diurnal_cycle.png)
 ![PM2.5 against weather](reports/figures/weather_drivers.png)
 
@@ -70,7 +95,7 @@ pytest                          # or: pytest -m "not integration"
 
 1. ~~Data pipeline~~ ✅
 2. ~~Exploratory analysis~~ ✅: SQL analytical layer (`daily_station` view, WHO/EU thresholds) + notebook
-3. PM2.5 24–48 h forecasting: baselines → LightGBM → deep learning, time-series CV
+3. PM2.5 24–48 h forecasting: ~~baselines → LightGBM~~ ✅, episode classifier ✅; next: weather features, deep learning comparison
 4. Power BI dashboard
 5. LLM assistant: text-to-SQL, forecast tool, RAG over WHO/EU guidelines, with evaluation
 
