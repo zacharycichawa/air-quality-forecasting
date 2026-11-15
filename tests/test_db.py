@@ -78,3 +78,12 @@ def test_archive_overwrites_forecast_weather(engine, station):
             5.0,
             "archive",
         )
+
+
+def test_session_time_zone_is_utc(engine):
+    # extract()/date_trunc() on timestamptz depend on the session zone; must be UTC.
+    with engine.connect() as conn:
+        year = conn.exec_driver_sql(
+            "SELECT extract(year FROM timestamptz '2025-12-31 23:00:00+00')"
+        ).scalar_one()
+    assert year == 2025

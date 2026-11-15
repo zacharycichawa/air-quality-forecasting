@@ -32,13 +32,35 @@ WEATHER_COLS = [
 
 @lru_cache(maxsize=4)
 def get_engine(database: str | None = None) -> Engine:
-    return create_engine(db_settings(database).url, pool_pre_ping=True)
+    # Pin the session time zone to UTC: otherwise extract()/date_trunc() on timestamptz
+    # use the server's local zone and e.g. 2025-12-31 23:00Z would count as year 2026.
+    return create_engine(
+        db_settings(database).url,
+        pool_pre_ping=True,
+        connect_args={"options": "-c timezone=UTC"},
+    )
+
+
+MATERIALIZED_VIEWS = ("daily_station",)
 
 
 def init_schema(engine: Engine) -> None:
-    sql = (SQL_DIR / "schema.sql").read_text(encoding="utf-8")
+    """Create tables (schema.sql) and the analytical layer (views.sql). Idempotent."""
     with engine.begin() as conn:
-        conn.exec_driver_sql(sql)
+        raw = conn.connection.driver_connection  # no parameters -> '%' in SQL needs no escaping
+        for name in ("schema.sql", "views.sql"):
+            raw.execute((SQL_DIR / name).read_text(encoding="utf-8"))
+
+
+def refresh_views(engine: Engine) -> None:
+    """Refresh materialized views; CONCURRENTLY (no read lock) once they hold data."""
+    with engine.begin() as conn:
+        for view in MATERIALIZED_VIEWS:
+            populated = conn.execute(
+                text("SELECT ispopulated FROM pg_matviews WHERE matviewname = :v"), {"v": view}
+            ).scalar_one()
+            mode = "CONCURRENTLY " if populated else ""
+            conn.exec_driver_sql(f"REFRESH MATERIALIZED VIEW {mode}{view}")
 
 
 def _require_utc(df: pd.DataFrame) -> None:

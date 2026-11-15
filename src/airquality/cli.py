@@ -17,7 +17,13 @@ import typer  # noqa: E402
 from sqlalchemy import Engine, text  # noqa: E402
 
 from airquality.config import POLLUTANTS  # noqa: E402
-from airquality.db import get_engine, ingestion_run, init_schema, upsert_measurements  # noqa: E402
+from airquality.db import (  # noqa: E402
+    get_engine,
+    ingestion_run,
+    init_schema,
+    refresh_views,
+    upsert_measurements,
+)
 from airquality.ingest.gios_api import GiosClient  # noqa: E402
 from airquality.ingest.gios_archive import (  # noqa: E402
     archive_measurements,
@@ -72,6 +78,15 @@ def init_db(ctx: typer.Context) -> None:
     """Create tables if they do not exist."""
     init_schema(_engine(ctx))
     log.info("schema ready")
+
+
+@app.command("refresh-views")
+def refresh_views_cmd(ctx: typer.Context) -> None:
+    """Recompute the analytical materialized views (run after loads)."""
+    engine = _engine(ctx)
+    with ingestion_run(engine, "refresh-views"):
+        refresh_views(engine)
+    log.info("views refreshed")
 
 
 @app.command("load-stations")

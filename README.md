@@ -4,8 +4,23 @@ End-to-end data project on Polish air quality: an automated pipeline that loads 
 GIOŚ measurements and Open-Meteo weather into PostgreSQL, with PM2.5 forecasting,
 a BI dashboard and an LLM assistant planned on top.
 
-> **Status:** work in progress. The data ingestion layer is done and tested; analysis,
+> **Status:** work in progress. Data pipeline and exploratory analysis are done;
 > forecasting, dashboard and assistant are next.
+
+## Key findings so far ([full analysis notebook](notebooks/01_eda.ipynb))
+
+- **PM2.5 fell ~20 % from 2019 to 2025** (network mean 19.4 → 15.5 µg/m³). It now
+  meets the EU annual limit but is still ~3× the WHO 2021 guideline, and about a third
+  of station-days exceed the WHO daily guideline.
+- **Smog is a heating-season problem:** October–March daily means are about twice the
+  summer level, with an evening peak when homes are heated.
+- **Weather decides the episodes:** cold, calm air and a low boundary layer trap
+  pollution (Spearman ρ with PM2.5: boundary-layer height −0.48, temperature −0.43).
+- **Kraków improved the most among large cities:** it went from 4th worst (2019) to 18th
+  of 72 (2025) after banning solid-fuel heating.
+
+![Daily cycle of PM2.5](reports/figures/diurnal_cycle.png)
+![PM2.5 against weather](reports/figures/weather_drivers.png)
 
 ## What's built so far
 
@@ -24,7 +39,7 @@ a BI dashboard and an LLM assistant planned on top.
 - **Engineering**:
   - Idempotent bulk upserts via `COPY`.
   - Retries with backoff and overall time caps.
-  - 53 tests (unit tests with mocked HTTP + integration tests on a separate test database).
+  - 59 tests (unit tests with mocked HTTP + integration tests on a separate test database).
 
 Data-source details and quirks (fixed-CET timestamps, rate limits, archive layout) are
 documented in [docs/data_sources.md](docs/data_sources.md).
@@ -35,7 +50,7 @@ documented in [docs/data_sources.md](docs/data_sources.md).
 cp .env.example .env            # set the Postgres password
 docker compose up -d            # or use a local PostgreSQL 17 install
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[dev,analysis,ml]"
 
 airquality init-db
 airquality load-stations
@@ -54,7 +69,7 @@ pytest                          # or: pytest -m "not integration"
 ## Roadmap
 
 1. ~~Data pipeline~~ ✅
-2. Exploratory analysis: seasonality, heating-season smog, weather effects
+2. ~~Exploratory analysis~~ ✅: SQL analytical layer (`daily_station` view, WHO/EU thresholds) + notebook
 3. PM2.5 24–48 h forecasting: baselines → LightGBM → deep learning, time-series CV
 4. Power BI dashboard
 5. LLM assistant: text-to-SQL, forecast tool, RAG over WHO/EU guidelines, with evaluation
