@@ -4,8 +4,9 @@ End-to-end data project on Polish air quality: an automated pipeline that loads 
 GIOŚ measurements and Open-Meteo weather into PostgreSQL, with PM2.5 forecasting,
 a BI dashboard and an LLM assistant planned on top.
 
-> **Status:** work in progress. Data pipeline, exploratory analysis and
-> baseline forecasting and dashboards are done; weather features and the AI assistant are next.
+> **Status:** data pipeline, analysis, forecasting, dashboards and the AI assistant are
+> working. In progress: the forecast model with weather features (the weather backfill is
+> limited by the free API quota) and the Power BI report.
 
 ## Key findings so far ([full analysis notebook](notebooks/01_eda.ipynb))
 
@@ -61,6 +62,51 @@ error in µg/m³, without weather features:
 
 ![Streamlit app overview](reports/figures/app_overview.png)
 
+## AI assistant (local LLM)
+
+Ask questions in English or Polish. A local model (**Qwen2.5 7B via Ollama**, on a 6 GB GPU)
+answers using three tools:
+
+| Tool | What it does |
+|---|---|
+| `run_sql` | text-to-SQL over the `bi` star schema |
+| `get_forecast` | latest 24/48 h PM2.5 forecast for a city |
+| `search_guidelines` | retrieval (RAG) over WHO 2021 guidelines, EU law, health advice and this project's methodology, with source citations |
+
+**SQL safety in layers:**
+- A dedicated PostgreSQL role can only `SELECT` from the `bi` views, and its sessions are
+  read-only with a statement timeout.
+- Queries are also pre-checked (single `SELECT`) and row-capped.
+- Tests prove the database itself refuses writes and raw-table access, even if the
+  validator is bypassed.
+
+**Evaluation** ([evals/](evals/)): ground truth for data questions comes from reference
+SQL run at evaluation time.
+
+| Set | Questions | Accuracy | Notes |
+|---|---|---|---|
+| Development set | 30 (data, forecast, guidelines, safety) | 100 % | prompt was iterated on this set (93 % → 87 % → 100 %) |
+| **Held-out set** | 12, never used for tuning, run once | **92 %** | 1 miss: a weekday/weekend comparison |
+
+Median answer time is about 11 s. Detailed results: `reports/metrics/assistant_eval.json`
+and `assistant_holdout.json`.
+
+Problems the evaluation surfaced, and how they were fixed:
+- **Ollama's tool parser silently dropped calls with multi-line SQL** (raw newlines inside
+  JSON). Fix: prompt-based tool calling with a lenient parser.
+- **Silently wrong numbers** from mixing pollutants in one average, and wrap-around month
+  ranges (`BETWEEN 10 AND 3` matches nothing). Fix: explicit SQL rules.
+- **SQL written as text instead of executed.** Fix: a code-level recovery step.
+- **One unfair test item** where the correct answer was a tie. Fix: replaced, with a note
+  in the eval file.
+
+```bash
+airquality build-index                 # read-only DB role + embed docs/knowledge/
+airquality ask "Which city had the highest average PM2.5 in 2024?"
+streamlit run app/assistant_app.py     # local chat UI showing every tool call and SQL query
+airquality eval-assistant [--holdout]
+```
+
 ## What's built so far
 
 - **PostgreSQL warehouse** ([sql/schema.sql](sql/schema.sql)): stations, sensors, hourly
@@ -78,7 +124,7 @@ error in µg/m³, without weather features:
 - **Engineering**:
   - Idempotent bulk upserts via `COPY`.
   - Retries with backoff and overall time caps.
-  - 79 tests (unit tests with mocked HTTP + integration tests on a separate test database).
+  - 107 tests (unit tests with mocked HTTP + integration tests on a separate test database).
 
 Data-source details and quirks (fixed-CET timestamps, rate limits, archive layout) are
 documented in [docs/data_sources.md](docs/data_sources.md).
@@ -117,8 +163,9 @@ pytest                          # or: pytest -m "not integration"
 2. ~~Exploratory analysis~~ ✅: SQL analytical layer (`daily_station` view, WHO/EU thresholds) + notebook
 3. PM2.5 24–48 h forecasting: ~~baselines → LightGBM~~ ✅, episode classifier ✅; next: weather features, deep learning comparison
 4. Dashboards: Streamlit app ✅, Power BI star schema + guide ✅ (report: in progress)
-5. LLM assistant (local model via Ollama): text-to-SQL, forecast tool, RAG over WHO/EU
-   guidelines, with evaluation
+5. ~~LLM assistant~~ ✅ (local Qwen2.5 7B via Ollama): text-to-SQL, forecast tool, RAG,
+   evaluated on development + held-out sets
+6. Next: weather-feature forecast model (once the weather backfill completes), Power BI report
 
 ## Data sources
 

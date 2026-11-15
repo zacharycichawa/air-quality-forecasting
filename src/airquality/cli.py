@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from datetime import datetime
@@ -297,6 +298,53 @@ def export_snapshot_cmd(ctx: typer.Context) -> None:
     from airquality.snapshot import export_snapshot
 
     export_snapshot(_engine(ctx))
+
+
+def _assistant():
+    from airquality.assistant.agent import Assistant
+
+    return Assistant(get_engine(reader=True))
+
+
+@app.command("build-index")
+def build_index(ctx: typer.Context) -> None:
+    """Create the read-only DB role and embed docs/knowledge/ for the assistant (Ollama)."""
+    from airquality.assistant.knowledge import KnowledgeIndex
+    from airquality.assistant.llm import OllamaClient
+    from airquality.assistant.sql_tool import ensure_reader_role
+
+    ensure_reader_role(_engine(ctx))
+    index = KnowledgeIndex.build(OllamaClient().embed)
+    index.save()
+    log.info("knowledge index: %d passages", len(index.chunks))
+
+
+@app.command()
+def ask(question: Annotated[str, typer.Argument(help="Question in English or Polish.")]) -> None:
+    """Ask the local LLM assistant a question about Polish air quality."""
+    ans = _assistant().ask(question)
+    for call in ans.tool_calls:
+        typer.secho(f"  [{call['tool']}] {json.dumps(call['args'], ensure_ascii=False)}"
+                    + (f"  -> error: {call['error']}" if call["error"] else ""), fg="cyan")
+    typer.echo(f"\n{ans.answer}\n")
+    typer.secho(f"({ans.seconds}s, {ans.steps} steps)", fg="bright_black")
+
+
+@app.command("eval-assistant")
+def eval_assistant(
+    ctx: typer.Context,
+    only: Annotated[str | None, typer.Option(help="One category or question id.")] = None,
+    holdout: Annotated[bool, typer.Option(help="Use the held-out set (never tuned on).")] = False,
+) -> None:
+    """Run the assistant evaluation and save the report under reports/metrics/."""
+    from airquality.assistant.evaluate import EVAL_FILE, HOLDOUT_FILE, run_eval
+
+    s = run_eval(_assistant(), _engine(ctx), get_engine(reader=True),
+                 path=HOLDOUT_FILE if holdout else EVAL_FILE, only=only)
+    typer.echo(f"\naccuracy {s['accuracy']:.0%} on {s['n']} questions; by category: "
+               + ", ".join(f"{c} {v['accuracy']:.0%} ({v['n']})"
+                           for c, v in s["by_category"].items())
+               + f"; median {s['median_seconds']}s per question")
 
 
 if __name__ == "__main__":

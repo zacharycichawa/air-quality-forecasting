@@ -30,12 +30,13 @@ WEATHER_COLS = [
 ]
 
 
-@lru_cache(maxsize=4)
-def get_engine(database: str | None = None) -> Engine:
+@lru_cache(maxsize=8)
+def get_engine(database: str | None = None, reader: bool = False) -> Engine:
+    """Engine for the owner role, or (`reader=True`) the assistant's read-only role."""
     # Pin the session time zone to UTC: otherwise extract()/date_trunc() on timestamptz
     # use the server's local zone and e.g. 2025-12-31 23:00Z would count as year 2026.
     return create_engine(
-        db_settings(database).url,
+        db_settings(database, reader=reader).url,
         pool_pre_ping=True,
         connect_args={"options": "-c timezone=UTC"},
     )

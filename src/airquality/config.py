@@ -35,11 +35,21 @@ class DbSettings:
         )
 
 
-def db_settings(database: str | None = None) -> DbSettings:
+def db_settings(database: str | None = None, *, reader: bool = False) -> DbSettings:
+    """Owner credentials by default; `reader=True` gives the assistant's read-only role."""
     return DbSettings(
         host=os.getenv("POSTGRES_HOST", "localhost"),
         port=int(os.getenv("POSTGRES_PORT", "5432")),
-        user=os.getenv("POSTGRES_USER", "postgres"),
-        password=os.getenv("POSTGRES_PASSWORD", ""),
+        user=READER_ROLE if reader else os.getenv("POSTGRES_USER", "postgres"),
+        password=(os.getenv("AQ_READER_PASSWORD", "") if reader
+                  else os.getenv("POSTGRES_PASSWORD", "")),
         database=database or os.getenv("POSTGRES_DB", "airquality"),
     )
+
+
+# LLM assistant (local model served by Ollama)
+READER_ROLE = "aq_reader"
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+KNOWLEDGE_DIR = PROJECT_ROOT / "docs" / "knowledge"
