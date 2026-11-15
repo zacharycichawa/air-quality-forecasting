@@ -1,0 +1,21 @@
+# secrets
+.env
+# python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+# data / artifacts
+data/
+models/
+*.parquet
+# notebooks
+.ipynb_checkpoints/
+# editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
