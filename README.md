@@ -5,7 +5,7 @@ GIOŚ measurements and Open-Meteo weather into PostgreSQL, with PM2.5 forecastin
 a BI dashboard and an LLM assistant planned on top.
 
 > **Status:** work in progress. Data pipeline, exploratory analysis and
-> baseline forecasting are done; weather features, dashboard and assistant are next.
+> baseline forecasting and dashboards are done; weather features and the AI assistant are next.
 
 ## Key findings so far ([full analysis notebook](notebooks/01_eda.ipynb))
 
@@ -47,6 +47,20 @@ error in µg/m³, without weather features:
 ![Daily cycle of PM2.5](reports/figures/diurnal_cycle.png)
 ![PM2.5 against weather](reports/figures/weather_drivers.png)
 
+## Dashboards
+
+- **Interactive web app** ([app/streamlit_app.py](app/streamlit_app.py)) has four tabs:
+  national overview with a station map, station explorer, live 24/48 h forecasts with
+  smog-alert probabilities, and model performance. It reads a 2 MB Parquet snapshot
+  (`airquality export-snapshot`), so it can be deployed free without the database.
+  Run it with `streamlit run app/streamlit_app.py`.
+- **Power BI**: the database exposes a star schema in the `bi` schema
+  ([sql/bi.sql](sql/bi.sql)): station, date and threshold dimensions; daily
+  air-quality and forecast-vs-actual facts in Polish local time. Build steps, DAX
+  measures and page designs are in [docs/powerbi_guide.md](docs/powerbi_guide.md).
+
+![Streamlit app overview](reports/figures/app_overview.png)
+
 ## What's built so far
 
 - **PostgreSQL warehouse** ([sql/schema.sql](sql/schema.sql)): stations, sensors, hourly
@@ -64,7 +78,7 @@ error in µg/m³, without weather features:
 - **Engineering**:
   - Idempotent bulk upserts via `COPY`.
   - Retries with backoff and overall time caps.
-  - 59 tests (unit tests with mocked HTTP + integration tests on a separate test database).
+  - 79 tests (unit tests with mocked HTTP + integration tests on a separate test database).
 
 Data-source details and quirks (fixed-CET timestamps, rate limits, archive layout) are
 documented in [docs/data_sources.md](docs/data_sources.md).
@@ -83,6 +97,12 @@ airquality backfill-archive --years 2019-2025
 airquality backfill-api --start 2026-01-01
 airquality weather-archive --start 2019-01-01
 airquality update               # daily incremental load
+airquality refresh-views        # recompute daily means (analytics + BI layer)
+
+airquality train-forecast --horizon 24     # train + evaluate (also --horizon 48, --weather)
+airquality load-backtests       # test-year predictions -> forecasts table (dashboards)
+airquality predict              # live 24/48 h forecasts from the latest data
+airquality export-snapshot      # refresh the web app's data snapshot
 ```
 
 Run the tests (integration tests need a database named `airquality_test`):
@@ -96,8 +116,9 @@ pytest                          # or: pytest -m "not integration"
 1. ~~Data pipeline~~ ✅
 2. ~~Exploratory analysis~~ ✅: SQL analytical layer (`daily_station` view, WHO/EU thresholds) + notebook
 3. PM2.5 24–48 h forecasting: ~~baselines → LightGBM~~ ✅, episode classifier ✅; next: weather features, deep learning comparison
-4. Power BI dashboard
-5. LLM assistant: text-to-SQL, forecast tool, RAG over WHO/EU guidelines, with evaluation
+4. Dashboards: Streamlit app ✅, Power BI star schema + guide ✅ (report: in progress)
+5. LLM assistant (local model via Ollama): text-to-SQL, forecast tool, RAG over WHO/EU
+   guidelines, with evaluation
 
 ## Data sources
 

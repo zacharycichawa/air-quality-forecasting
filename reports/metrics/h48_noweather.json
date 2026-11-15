@@ -171,6 +171,7 @@
   },
   "episode_classifier": {
     "threshold_ug_m3": 50.0,
+    "cutoff": 0.16021331490482787,
     "val": {
       "precision": 0.1585,
       "recall": 0.3349,
@@ -207,5 +208,5 @@
     "pm10_mean24": 30735.3,
     "pm25_mean24": 25985.9
   },
-  "runtime_s": 245
+  "runtime_s": 276
 }

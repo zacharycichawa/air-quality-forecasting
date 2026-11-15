@@ -8,7 +8,7 @@ from sqlalchemy import Engine, text
 from airquality.db import get_engine, init_schema
 
 TEST_DB = "airquality_test"
-TABLES = "weather_hourly, measurements, sensors, stations, ingestion_runs"
+TABLES = "forecasts, weather_hourly, measurements, sensors, stations, ingestion_runs"
 
 
 @pytest.fixture

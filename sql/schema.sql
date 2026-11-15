@@ -62,3 +62,20 @@ CREATE TABLE IF NOT EXISTS ingestion_runs (
     rows_upserted  bigint,
     error          text
 );
+
+-- Model outputs. run_type 'backtest' = predictions on the held-out test year (for
+-- evaluation dashboards); 'live' = forecasts issued from the latest data.
+CREATE TABLE IF NOT EXISTS forecasts (
+    model         text NOT NULL,                  -- e.g. 'lightgbm', 'persistence'
+    run_type      text NOT NULL CHECK (run_type IN ('backtest', 'live')),
+    station_code  text NOT NULL REFERENCES stations (station_code),
+    issue_ts      timestamptz NOT NULL,
+    horizon_h     smallint NOT NULL,
+    target_ts     timestamptz NOT NULL,
+    predicted     double precision NOT NULL,      -- µg/m³
+    p_episode     double precision,               -- P(PM2.5 > 50 µg/m³), if available
+    uses_weather  boolean NOT NULL DEFAULT false,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (model, run_type, station_code, issue_ts, horizon_h)
+);
+CREATE INDEX IF NOT EXISTS forecasts_target_idx ON forecasts (station_code, target_ts);

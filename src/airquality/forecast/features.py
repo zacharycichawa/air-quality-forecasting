@@ -88,11 +88,14 @@ def build_features(
     stations: pd.DataFrame,
     horizon: int,
     weather: pd.DataFrame | None = None,
+    require_target: bool = True,
 ) -> pd.DataFrame:
     """Return one row per (station, issue time) with features, `target` and metadata.
 
-    Rows are kept only where the target and the current PM2.5 reading exist, so every
-    model and baseline is scored on exactly the same rows.
+    Rows are kept only where the current PM2.5 reading exists and, for training and
+    evaluation (`require_target=True`), where the target exists too, so every model and
+    baseline is scored on exactly the same rows. Use `require_target=False` for live
+    forecasts, whose targets lie in the future.
     """
     df = hourly.sort_values(["station_code", "ts_utc"], kind="stable").reset_index(drop=True)
     target = df.groupby("station_code", observed=True, sort=False)["pm25"].shift(-horizon)
@@ -105,7 +108,10 @@ def build_features(
         parts.append(_weather(df, weather, horizon))
     feats = pd.concat(parts, axis=1)
 
-    feats = feats[feats["target"].notna() & feats["pm25_lag0"].notna()]
+    keep = feats["pm25_lag0"].notna()
+    if require_target:
+        keep &= feats["target"].notna()
+    feats = feats[keep]
     loc = stations.set_index("station_code")[["latitude", "longitude"]]
     feats = feats.join(loc, on="station_code")
     num = feats.select_dtypes("number").columns

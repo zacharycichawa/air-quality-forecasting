@@ -87,3 +87,19 @@ def test_session_time_zone_is_utc(engine):
             "SELECT extract(year FROM timestamptz '2025-12-31 23:00:00+00')"
         ).scalar_one()
     assert year == 2025
+
+
+def test_upsert_forecasts_replaces_same_key(engine, station):
+    from airquality.db import upsert_forecasts
+
+    def fc(pred: float) -> pd.DataFrame:
+        return pd.DataFrame({"model": ["lightgbm"], "run_type": ["live"], "station_code": ["StA"],
+                             "issue_ts": [TS], "horizon_h": [24],
+                             "target_ts": [TS + pd.Timedelta(hours=24)], "predicted": [pred],
+                             "p_episode": [0.1], "uses_weather": [False]})
+
+    assert upsert_forecasts(engine, fc(12.0)) == 1
+    assert upsert_forecasts(engine, fc(15.0)) == 1
+    with engine.connect() as conn:
+        rows = conn.exec_driver_sql("SELECT predicted FROM forecasts").all()
+    assert rows == [(15.0,)]

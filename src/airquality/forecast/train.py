@@ -113,13 +113,14 @@ def run_experiment(
         "val_mae_by_transform": {k: v[0] for k, v in candidates.items()},
         "best_iteration": model.best_iteration,
         "metrics": {k: v.round(4).reset_index().to_dict("records") for k, v in results.items()},
-        "episode_classifier": {"threshold_ug_m3": HIGH_POLLUTION,
+        "episode_classifier": {"threshold_ug_m3": HIGH_POLLUTION, "cutoff": cutoff,
                                **{k: {m: round(x, 4) for m, x in v.items()}
                                   for k, v in episodes.items()}},
         "top_features_gain": importance.head(15).round(1).to_dict(),
         "runtime_s": round(time.time() - t0),
     }
     _save(model, summary, name)
+    clf.save_model(str(MODEL_DIR / f"lgbm_{name}_episode.txt"), num_iteration=clf.best_iteration)
     log.info("%s done in %.0fs\n%s", name, time.time() - t0,
              results["test"][["mae", "rmse", "bias", "mae_heating", "skill_vs_persistence"]]
              .round(3).to_string())

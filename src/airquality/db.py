@@ -45,10 +45,10 @@ MATERIALIZED_VIEWS = ("daily_station",)
 
 
 def init_schema(engine: Engine) -> None:
-    """Create tables (schema.sql) and the analytical layer (views.sql). Idempotent."""
+    """Create tables (schema.sql), analytical views (views.sql) and BI layer (bi.sql)."""
     with engine.begin() as conn:
         raw = conn.connection.driver_connection  # no parameters -> '%' in SQL needs no escaping
-        for name in ("schema.sql", "views.sql"):
+        for name in ("schema.sql", "views.sql", "bi.sql"):
             raw.execute((SQL_DIR / name).read_text(encoding="utf-8"))
 
 
@@ -134,6 +134,31 @@ def upsert_weather(engine: Engine, df: pd.DataFrame) -> int:
                SET {", ".join(f"{c} = EXCLUDED.{c}" for c in value_cols)}, ingested_at = now()
              WHERE NOT (w.source = 'archive' AND EXCLUDED.source = 'forecast')
             """
+        )
+        return result.rowcount
+
+
+FORECAST_COLS = [
+    "model", "run_type", "station_code", "issue_ts", "horizon_h", "target_ts",
+    "predicted", "p_episode", "uses_weather",
+]
+
+
+def upsert_forecasts(engine: Engine, df: pd.DataFrame) -> int:
+    """Insert or replace model forecasts (key: model, run_type, station, issue, horizon)."""
+    if df.empty:
+        return 0
+    for col in ("issue_ts", "target_ts"):
+        _require_utc(df.rename(columns={col: "ts_utc"}))
+    key = ["model", "run_type", "station_code", "issue_ts", "horizon_h"]
+    df = df.drop_duplicates(key, keep="last")
+    updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in FORECAST_COLS if c not in key)
+    with engine.begin() as conn:
+        _copy_to_temp(conn, "tmp_fc", "forecasts", df, FORECAST_COLS)
+        result = conn.exec_driver_sql(
+            f"INSERT INTO forecasts ({', '.join(FORECAST_COLS)}) "
+            f"SELECT {', '.join(FORECAST_COLS)} FROM tmp_fc "
+            f"ON CONFLICT ({', '.join(key)}) DO UPDATE SET {updates}, created_at = now()"
         )
         return result.rowcount
 

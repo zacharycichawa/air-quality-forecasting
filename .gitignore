@@ -9,9 +9,10 @@ __pycache__/
 .ruff_cache/
 .coverage
 # data / artifacts
-data/
-models/
+/data/
+/models/
 *.parquet
+!app/data/*.parquet
 # notebooks
 .ipynb_checkpoints/
 # editors / OS

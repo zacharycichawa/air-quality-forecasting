@@ -88,3 +88,25 @@ def test_weather_is_taken_at_target_hour():
     assert np.allclose(a["wx_temp_change"], 24)
     assert f[f.station_code == "B"]["wx_temperature_2m"].isna().all()  # no weather for B
     assert "wx_temperature_2m" not in feature_columns(f, use_weather=False)
+
+
+def test_inference_mode_keeps_rows_without_target():
+    hourly = hourly_two_stations(200)
+    train_rows = build_features(hourly, STATIONS, 24)
+    live_rows = build_features(hourly, STATIONS, 24, require_target=False)
+    last_issue = hourly.ts_utc.max()
+    assert last_issue not in set(train_rows.issue_ts)   # target lies beyond the data
+    assert last_issue in set(live_rows.issue_ts)
+    assert live_rows[live_rows.issue_ts == last_issue]["target"].isna().all()
+
+
+def test_latest_issue_rows_skips_stale_stations():
+    from airquality.forecast.predict import latest_issue_rows
+
+    hourly = hourly_two_stations(200)
+    hourly.loc[(hourly.station_code == "B") & (hourly.ts_utc > T0 + pd.Timedelta(hours=150)),
+               "pm25"] = np.nan  # station B stopped reporting 49 h before the end
+    f = build_features(hourly, STATIONS, 24, require_target=False)
+    rows = latest_issue_rows(f, now=hourly.ts_utc.max())
+    assert rows["station_code"].astype(str).tolist() == ["A"]
+    assert rows["issue_ts"].item() == hourly.ts_utc.max()

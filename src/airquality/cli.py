@@ -265,5 +265,39 @@ def train_forecast(
     run_experiment(_engine(ctx), horizon, weather, refresh_cache=refresh_cache)
 
 
+@app.command()
+def predict(
+    ctx: typer.Context,
+    weather: Annotated[bool, typer.Option(help="Use the weather model (needs forecasts).")] = False,
+) -> None:
+    """Issue live 24 h / 48 h PM2.5 forecasts from the latest data into `forecasts`."""
+    from airquality.forecast.predict import predict_live
+
+    engine = _engine(ctx)
+    with ingestion_run(engine, "predict", {"weather": weather}) as run:
+        run["rows"] = predict_live(engine, use_weather=weather)
+
+
+@app.command("load-backtests")
+def load_backtests_cmd(
+    ctx: typer.Context,
+    weather: Annotated[bool, typer.Option(help="Load the weather model's backtests.")] = False,
+) -> None:
+    """Copy the test-year predictions into `forecasts` (for evaluation dashboards)."""
+    from airquality.forecast.predict import load_backtests
+
+    engine = _engine(ctx)
+    with ingestion_run(engine, "load-backtests", {"weather": weather}) as run:
+        run["rows"] = load_backtests(engine, use_weather=weather)
+
+
+@app.command("export-snapshot")
+def export_snapshot_cmd(ctx: typer.Context) -> None:
+    """Write the compact Parquet snapshot used by the Streamlit app (app/data/)."""
+    from airquality.snapshot import export_snapshot
+
+    export_snapshot(_engine(ctx))
+
+
 if __name__ == "__main__":
     app()
