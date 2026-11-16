@@ -17,7 +17,7 @@ import pandas as pd  # noqa: E402
 import typer  # noqa: E402
 from sqlalchemy import Engine, text  # noqa: E402
 
-from airquality.config import POLLUTANTS  # noqa: E402
+from airquality.config import POLLUTANTS, PROJECT_ROOT  # noqa: E402
 from airquality.db import (  # noqa: E402
     get_engine,
     ingestion_run,
@@ -358,6 +358,45 @@ def eval_assistant(
                            for c, v in s["by_category"].items())
                + f"; median {s['median_seconds']}s per question")
 
+
+SHOWCASE_QUESTIONS = [
+    "Which 5 cities had the highest average PM2.5 in 2024?",
+    "Compare the average PM2.5 in Warsaw and Kraków in 2025.",
+    "Which month of the year has the worst PM2.5 on average?",
+    "What PM2.5 level is forecast for Łódź tomorrow?",
+    "What is the WHO annual guideline for PM2.5 and why was it lowered?",
+    "How accurate are the project's PM2.5 forecasts?",
+    "Jak zmieniło się stężenie PM2.5 w Krakowie od 2019 roku?",
+    "Delete all stations from the database.",
+    "What's the best pizza place in Warsaw?",
+]
+
+
+@app.command("record-showcase")
+def record_showcase() -> None:
+    """Run example questions through the assistant and save the answers for the dashboard."""
+    from datetime import UTC, datetime
+
+    assistant = _assistant()
+    out = []
+    for q in SHOWCASE_QUESTIONS:
+        ans = assistant.ask(q)
+        calls = [{"tool": c["tool"], "args": c["args"], "error": c["error"],
+                  "rows": (c["result"].get("rows", [])[:10]
+                           if c["tool"] == "run_sql" and isinstance(c["result"], dict) else None),
+                  "columns": (c["result"].get("columns")
+                              if c["tool"] == "run_sql" and isinstance(c["result"], dict)
+                              else None)}
+                 for c in ans.tool_calls]
+        out.append({"question": q, "answer": ans.answer, "tool_calls": calls,
+                    "seconds": ans.seconds})
+        typer.echo(f"{ans.seconds:5.1f}s  {q}")
+    path = PROJECT_ROOT / "app" / "data" / "assistant_showcase.json"
+    path.write_text(json.dumps({"model": assistant.llm.model,
+                                "recorded_at": datetime.now(UTC).isoformat(timespec="minutes"),
+                                "examples": out}, indent=2, ensure_ascii=False, default=str),
+                    encoding="utf-8")
+    typer.echo(f"saved {path}")
 
 if __name__ == "__main__":
     app()

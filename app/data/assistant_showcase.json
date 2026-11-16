@@ -1,0 +1,210 @@
+{
+  "model": "qwen2.5:7b",
+  "recorded_at": "2026-11-16T15:29+00:00",
+  "examples": [
+    {
+      "question": "Which 5 cities had the highest average PM2.5 in 2024?",
+      "answer": "The 5 cities with the highest average PM2.5 in 2024 were:\n1. Zgierz - 20.6 µg/m³\n2. Jastrzębie-Zdrój - 20.2 µg/m³\n3. Bielsko-Biała - 19.5 µg/m³\n4. Włocławek - 19.5 µg/m³\n5. Dębica - 19.3 µg/m³",
+      "tool_calls": [
+        {
+          "tool": "run_sql",
+          "args": {
+            "query": "SELECT s.city, ROUND(AVG(f.mean_ug_m3)::numeric, 1) AS avg_pm25 FROM bi.fact_daily_air_quality f JOIN bi.dim_station s USING (station_code) WHERE f.pollutant = 'PM2.5' AND EXTRACT(YEAR FROM f.date) = 2024 AND NOT s.is_mobile GROUP BY s.city ORDER BY avg_pm25 DESC LIMIT 5;"
+          },
+          "error": null,
+          "rows": [
+            [
+              "Zgierz",
+              "20.6"
+            ],
+            [
+              "Jastrzębie-Zdrój",
+              "20.2"
+            ],
+            [
+              "Bielsko-Biała",
+              "19.5"
+            ],
+            [
+              "Włocławek",
+              "19.5"
+            ],
+            [
+              "Dębica",
+              "19.3"
+            ]
+          ],
+          "columns": [
+            "city",
+            "avg_pm25"
+          ]
+        }
+      ],
+      "seconds": 21.6
+    },
+    {
+      "question": "Compare the average PM2.5 in Warsaw and Kraków in 2025.",
+      "answer": "The average PM2.5 concentration in Kraków in 2025 was 17.6 µg/m³, while in Warsaw it was 14.7 µg/m³.",
+      "tool_calls": [
+        {
+          "tool": "run_sql",
+          "args": {
+            "query": "SELECT s.city, ROUND(AVG(f.mean_ug_m3)::numeric, 1) AS avg_pm25 FROM bi.fact_daily_air_quality f JOIN bi.dim_station s USING (station_code) WHERE f.pollutant = 'PM2.5' AND EXTRACT(YEAR FROM f.date) = 2025 AND s.city IN ('Warszawa', 'Kraków') GROUP BY s.city ORDER BY s.city;"
+          },
+          "error": null,
+          "rows": [
+            [
+              "Kraków",
+              "17.6"
+            ],
+            [
+              "Warszawa",
+              "14.7"
+            ]
+          ],
+          "columns": [
+            "city",
+            "avg_pm25"
+          ]
+        }
+      ],
+      "seconds": 16.5
+    },
+    {
+      "question": "Which month of the year has the worst PM2.5 on average?",
+      "answer": "The month with the worst average PM2.5 levels is January, with an average concentration of approximately 25.9 µg/m³.",
+      "tool_calls": [
+        {
+          "tool": "run_sql",
+          "args": {
+            "query": "SELECT month_name, AVG(mean_ug_m3) AS avg_pm25 FROM bi.fact_daily_air_quality f JOIN bi.dim_station s USING (station_code) JOIN bi.dim_date d USING (date) WHERE f.pollutant = 'PM2.5' GROUP BY month_name ORDER BY avg_pm25 DESC LIMIT 1;"
+          },
+          "error": null,
+          "rows": [
+            [
+              "Jan",
+              25.9353193542581
+            ]
+          ],
+          "columns": [
+            "month_name",
+            "avg_pm25"
+          ]
+        }
+      ],
+      "seconds": 11.0
+    },
+    {
+      "question": "What PM2.5 level is forecast for Łódź tomorrow?",
+      "answer": "The PM2.5 level forecast for Łódź tomorrow (2026-11-17) at 11:00 is 18.1 µg/m³. The probability of PM2.5 levels exceeding 50 µg/m³ is very low, with a chance of only 0.3%.",
+      "tool_calls": [
+        {
+          "tool": "get_forecast",
+          "args": {
+            "city": "Łódź"
+          },
+          "error": null,
+          "rows": null,
+          "columns": null
+        }
+      ],
+      "seconds": 10.2
+    },
+    {
+      "question": "What is the WHO annual guideline for PM2.5 and why was it lowered?",
+      "answer": "The WHO 2021 guideline for PM2.5 is an annual mean concentration of 5 µg/m³, which is a significant reduction from the 2005 guideline of 10 µg/m³. This lowering of the guideline reflects a more comprehensive understanding of the health impacts of air pollution, particularly the fine particulate matter that can penetrate deep into the lungs and enter the bloodstream. The 24-hour mean guideline for PM2.5 is set at 15 µg/m³.\n\nYou can find more details in the [WHO Global Air Quality Guidelines (2021)](https://www.who.int/publications/i/item/9789240034228).",
+      "tool_calls": [
+        {
+          "tool": "search_guidelines",
+          "args": {
+            "query": "WHO annual guideline for PM2.5 and reasons for lowering it"
+          },
+          "error": null,
+          "rows": null,
+          "columns": null
+        }
+      ],
+      "seconds": 19.9
+    },
+    {
+      "question": "How accurate are the project's PM2.5 forecasts?",
+      "answer": "The project's PM2.5 forecasts are generated using a LightGBM gradient-boosting model. This model predicts hourly PM2.5 levels 24 and 48 hours ahead by considering recent PM2.5 values and averages, PM10 and NO2 levels, the hour, weekday, and month of the target time, station location, and weather forecast for the target hour (temperature, wind, humidity, pressure, precipitation, and cloud cover).\n\nThe model was trained on data from 2019 to 2023, tuned on 2024, and tested on 2025. The mean absolute error (MAE) for the 24-hour forecast was 6.15 µg/m³, and for the 48-hour forecast, it was 6.40 µg/m³. These errors are 20% and 28% better, respectively, compared to the persistence baseline (\"tomorrow equals today\"). Without weather information, the errors were 6.55 and 7.13 µg/m³, and with perfect weather knowledge, they would be about 5.3 and 5.6 µg/m³. The model is particularly useful on polluted days, where it outperforms alternatives, but it still under-predicts severe smog peaks and sometimes over-predicts on clean days when the forecast weather looks smog-prone.\n\nAdditionally, a separate classifier estimates the probability that PM2.5 will exceed 50 µg/m³ at the target hour. This classifier, using pollution history alone, caught about half of all high-pollution hours in 2025 (F1 score of 0.40 at 24 hours, compared to 0.35 for the rule \"it is above 50 now\"). Weather information further improves this classifier.\n\nFor more detailed information, you can refer to the project documentation available at [this link](https://github.com/zacharycichawa/air-quality-forecasting).",
+      "tool_calls": [
+        {
+          "tool": "search_guidelines",
+          "args": {
+            "query": "accuracy of PM2.5 forecasts"
+          },
+          "error": null,
+          "rows": null,
+          "columns": null
+        }
+      ],
+      "seconds": 47.3
+    },
+    {
+      "question": "Jak zmieniło się stężenie PM2.5 w Krakowie od 2019 roku?",
+      "answer": "Stężenie PM2.5 w Krakowie zmieniło się od 2019 roku następująco:\n\n- 2019: 24.8 µg/m³\n- 2020: 22.4 µg/m³\n- 2021: 25.0 µg/m³\n- 2022: 18.4 µg/m³\n- 2023: 18.0 µg/m³\n- 2024: 17.9 µg/m³\n- 2025: 17.6 µg/m³\n- 2026: 17.8 µg/m³\n\nObserwujemy tendencję do spadku stężenia PM2.5 w Krakowie, szczególnie od 2022 roku.",
+      "tool_calls": [
+        {
+          "tool": "run_sql",
+          "args": {
+            "query": "SELECT EXTRACT(YEAR FROM date) AS year, ROUND(AVG(mean_ug_m3)::numeric, 1) AS avg_pm25 FROM bi.fact_daily_air_quality f JOIN bi.dim_station s USING (station_code) WHERE f.pollutant = 'PM2.5' AND s.city = 'Kraków' AND EXTRACT(YEAR FROM date) >= 2019 GROUP BY year ORDER BY year;"
+          },
+          "error": null,
+          "rows": [
+            [
+              "2019",
+              "24.8"
+            ],
+            [
+              "2020",
+              "22.4"
+            ],
+            [
+              "2021",
+              "25.0"
+            ],
+            [
+              "2022",
+              "18.4"
+            ],
+            [
+              "2023",
+              "18.0"
+            ],
+            [
+              "2024",
+              "17.9"
+            ],
+            [
+              "2025",
+              "17.6"
+            ],
+            [
+              "2026",
+              "17.8"
+            ]
+          ],
+          "columns": [
+            "year",
+            "avg_pm25"
+          ]
+        }
+      ],
+      "seconds": 28.1
+    },
+    {
+      "question": "Delete all stations from the database.",
+      "answer": "I'm sorry, but I cannot perform that operation. Deleting data from the database is out of the scope of my capabilities as I am designed to provide information and analysis based on the existing data. If you need to delete data, you would need to use appropriate database management tools or services with the necessary permissions.",
+      "tool_calls": [],
+      "seconds": 5.6
+    },
+    {
+      "question": "What's the best pizza place in Warsaw?",
+      "answer": "I'm sorry, but my focus is on air quality data. I don't have information about pizza places. Can I help you with air quality data in Warsaw instead?",
+      "tool_calls": [],
+      "seconds": 3.5
+    }
+  ]
+}

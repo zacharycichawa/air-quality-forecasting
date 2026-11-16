@@ -17,7 +17,7 @@ local LLM assistant that answers questions in English or Polish.
   guidelines. It scores **92 % on a held-out test set** and works through a
   read-only database role.
 - **A live dashboard:** a Streamlit app (map, station explorer, live forecasts, model
-  performance) on top of a star schema in PostgreSQL.
+  performance, assistant examples) on top of a star schema in PostgreSQL.
 
 ![Streamlit app: national overview](reports/figures/app_overview.png)
 
@@ -81,13 +81,16 @@ Mean absolute error on the 2025 test year, in µg/m³ (lower is better):
 ## AI assistant
 
 A local model (Qwen2.5 7B served by Ollama on a 6 GB GPU) answers questions in English
-or Polish, using three tools:
+or Polish, using three tools. Recorded example answers, with the SQL behind each one, are
+in the **AI assistant** tab of the [live dashboard](https://air-quality-forecasting-9jvwnwva3kgntaijidn3qv.streamlit.app/).
 
 | Tool | What it does |
 |---|---|
 | `run_sql` | Writes and runs SQL over the `bi` star schema |
 | `get_forecast` | Latest 24/48 h PM2.5 forecast for a city |
 | `search_guidelines` | Retrieval over WHO 2021 guidelines, EU law, health advice and the project's methodology, with citations |
+
+![The assistant answering a forecast and a guideline question](reports/figures/assistant_chat.png)
 
 **Safety.** The assistant connects as a PostgreSQL role that can only read the `bi`
 views, in read-only sessions with a statement timeout. Queries are also checked
@@ -110,9 +113,9 @@ chat window that shows every tool call and SQL query behind each answer.
 ## Dashboard
 
 - **Streamlit app** ([live](https://air-quality-forecasting-9jvwnwva3kgntaijidn3qv.streamlit.app/),
-  [app/streamlit_app.py](app/streamlit_app.py)) has four tabs:
+  [app/streamlit_app.py](app/streamlit_app.py)) has five tabs:
   national overview with a station map, station explorer, live forecasts with smog-alert
-  probabilities, and model performance. It reads a 2 MB Parquet snapshot instead of the
+  probabilities, model performance, and recorded AI assistant answers. It reads a 2 MB Parquet snapshot instead of the
   database, so it can be deployed on Streamlit Community Cloud as is.
 - **Star schema.** The `bi` schema has station, date and threshold dimensions, plus
   daily air-quality and forecast-vs-actual facts in Polish local time. The assistant
@@ -184,6 +187,7 @@ airquality predict --weather                                # live 24/48 h forec
 # dashboard and assistant
 airquality export-snapshot && streamlit run app/streamlit_app.py
 airquality build-index && airquality ask "Which city had the cleanest air in 2023?"
+airquality record-showcase                  # refresh the recorded answers in the dashboard
 ```
 
 Run the tests with `pytest`. The integration tests need a PostgreSQL database named

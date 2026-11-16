@@ -228,7 +228,7 @@ class Assistant:
                 result = self._call(name, args)
                 trace.append({"tool": name, "args": args,
                               "error": result.get("error") if isinstance(result, dict) else None,
-                              "recovered": call.get("recovered", False)})
+                              "recovered": call.get("recovered", False), "result": result})
                 content = json.dumps(result, default=str, ensure_ascii=False)[:MAX_TOOL_CHARS]
                 messages.append({"role": "tool", "content": content, "tool_name": name})
         return Answer(question, "Sorry, I couldn't complete that within the step limit.",

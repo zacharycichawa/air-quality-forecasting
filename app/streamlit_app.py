@@ -31,6 +31,7 @@ def load() -> dict:
     d = {p.stem: pd.read_parquet(p) for p in DATA.glob("*.parquet")}
     d["metrics"] = {p.stem: json.loads(p.read_text()) for p in DATA.glob("h*.json")}
     d["meta"] = json.loads((DATA / "snapshot_meta.json").read_text())
+    d["showcase"] = json.loads((DATA / "assistant_showcase.json").read_text(encoding="utf-8"))
     st_ = d["stations"]
     st_["label"] = st_["city"] + " · " + st_["station_name"].str.slice(0, 40)
     for name in ("daily_pm25",):
@@ -76,8 +77,8 @@ st.caption(
     f"2019 onwards. Snapshot exported {d['meta']['exported_at'][:10]}. "
     f"[Source code and methodology]({REPO})")
 
-tab_overview, tab_station, tab_forecast, tab_model = st.tabs(
-    ["Overview", "Station explorer", "Forecast", "Model performance"])
+tab_overview, tab_station, tab_forecast, tab_model, tab_assistant = st.tabs(
+    ["Overview", "Station explorer", "Forecast", "Model performance", "AI assistant"])
 
 # ------------------------------------------------------------------ overview
 with tab_overview:
@@ -313,3 +314,37 @@ with tab_model:
                "the horizon, so it is always late. Weather forecasts help the model anticipate "
                "when calm, cold air will trap pollution, although sudden peaks are still "
                "under-predicted.")
+
+# ------------------------------------------------------------------ assistant
+with tab_assistant:
+    sc = d["showcase"]
+    st.markdown(
+        "The project includes an AI assistant that answers questions about Polish air quality "
+        "in English or Polish. A local LLM (Qwen2.5 7B, served by Ollama) decides which tool "
+        "to use: it writes **SQL** over the project's database, reads the **latest forecasts**, "
+        "or **searches WHO/EU guidelines** and the project's methodology. It connects through "
+        "a read-only database role, so it can't change any data.")
+    st.info(f"These are **recorded answers** ({sc['model']}, {sc['recorded_at'][:10]}), "
+            "shown as the assistant gave them. The model runs on a local GPU, so it isn't "
+            "hosted here. On a held-out test set it answered 11 of 12 questions correctly "
+            f"([evaluation details]({REPO}#ai-assistant)).", icon="ℹ️")
+    tool_labels = {"run_sql": "SQL query", "get_forecast": "Forecast lookup",
+                   "search_guidelines": "Guideline search"}
+    for ex in sc["examples"]:
+        with st.chat_message("user"):
+            st.write(ex["question"])
+        with st.chat_message("assistant"):
+            st.write(ex["answer"])
+            used = ", ".join(tool_labels.get(c["tool"], c["tool"]) for c in ex["tool_calls"])
+            with st.expander(f"How I got this: {used or 'no tools'} ({ex['seconds']} s)"):
+                if not ex["tool_calls"]:
+                    st.write("Answered directly, without touching the database.")
+                for c in ex["tool_calls"]:
+                    st.markdown(f"**{tool_labels.get(c['tool'], c['tool'])}**")
+                    if c["tool"] == "run_sql":
+                        st.code(c["args"].get("query", ""), language="sql")
+                        if c.get("rows"):
+                            st.dataframe(pd.DataFrame(c["rows"], columns=c["columns"]),
+                                         hide_index=True)
+                    else:
+                        st.code(json.dumps(c["args"], ensure_ascii=False), language="json")
