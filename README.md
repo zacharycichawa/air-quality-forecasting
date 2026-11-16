@@ -6,6 +6,8 @@ PostgreSQL warehouse, analyses seven years of smog, forecasts PM2.5 24 and 48 ho
 ahead at every station, and serves the results through interactive dashboards and a
 local LLM assistant that answers questions in English or Polish.
 
+**Live demo:** [open the dashboard on Streamlit Community Cloud](https://air-quality-forecasting-9jvwnwva3kgntaijidn3qv.streamlit.app/)
+
 **Highlights**
 - **24 million hourly measurements** from 2019 onwards. An automated, gap-free daily
   update covers PM2.5, PM10 and NO₂ at 219 stations.
@@ -107,7 +109,8 @@ chat window that shows every tool call and SQL query behind each answer.
 
 ## Dashboards
 
-- **Streamlit app** ([app/streamlit_app.py](app/streamlit_app.py)) has four tabs:
+- **Streamlit app** ([live](https://air-quality-forecasting-9jvwnwva3kgntaijidn3qv.streamlit.app/),
+  [app/streamlit_app.py](app/streamlit_app.py)) has four tabs:
   national overview with a station map, station explorer, live forecasts with smog-alert
   probabilities, and model performance. It reads a 2 MB Parquet snapshot instead of the
   database, so it can be deployed on Streamlit Community Cloud as is.
