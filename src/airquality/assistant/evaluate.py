@@ -98,14 +98,18 @@ def _counts(owner: Engine) -> tuple:
 
 
 def _forecast_values(reader: Engine) -> dict[str, list[float]]:
-    rows = run_select(reader, """
-        SELECT s.city, f.predicted_ug_m3 FROM bi.fact_forecast f
+    """All live forecast values per city (aggregated per city, so the row cap of the SQL
+    helper can't silently drop cities)."""
+    res = run_select(reader, """
+        SELECT s.city, array_agg(round(f.predicted_ug_m3::numeric, 1)) FROM bi.fact_forecast f
           JOIN bi.dim_station s USING (station_code)
-         WHERE f.run_type = 'live' AND f.model = 'lightgbm'""")["rows"]
-    out: dict[str, list[float]] = defaultdict(list)
-    for city, v in rows:
-        out[city].append(round(float(v), 1))
-    return out
+         WHERE f.run_type = 'live' AND f.model = 'lightgbm'
+           AND f.issue_local = (SELECT max(g.issue_local) FROM bi.fact_forecast g
+                                 WHERE g.run_type = 'live' AND g.station_code = f.station_code)
+         GROUP BY s.city""")
+    if res["truncated"]:
+        raise RuntimeError("forecast ground truth truncated")
+    return {city: [float(v) for v in values] for city, values in res["rows"]}
 
 
 def run_eval(assistant: Assistant, owner: Engine, reader: Engine,

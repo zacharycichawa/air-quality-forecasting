@@ -175,7 +175,7 @@ class Assistant:
             return {"error": f"no PM2.5 stations found for city '{city}'"}
         with self.db.connect() as conn:
             rows = conn.execute(text("""
-                SELECT s.city, s.station_name, f.horizon_h, f.target_local,
+                SELECT s.city, s.station_name, f.horizon_h, f.target_local, f.uses_weather,
                        round(f.predicted_ug_m3::numeric, 1) AS predicted_ug_m3,
                        round(f.p_episode::numeric, 3) AS chance_above_50, f.issue_local
                   FROM bi.fact_forecast f JOIN bi.dim_station s USING (station_code)
@@ -187,8 +187,10 @@ class Assistant:
         if not rows:
             return {"error": f"no current forecast for {', '.join(matches)} (stations may "
                              f"not have reported recently)"}
+        uses_weather = any(r["uses_weather"] for r in rows)
         return {"forecasts": [dict(r) for r in rows],
-                "note": "model uses pollution history and calendar; no weather forecast"}
+                "note": ("model uses pollution history, calendar and the weather forecast"
+                         if uses_weather else "model uses pollution history and calendar")}
 
     def tool_search_guidelines(self, query: str) -> dict:
         hits = self.index.search(self.llm.embed([query])[0], k=3)

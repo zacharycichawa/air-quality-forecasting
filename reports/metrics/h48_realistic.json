@@ -1,0 +1,79 @@
+{
+  "experiment": "h48_realistic",
+  "horizon_hours": 48,
+  "model": "h48_weather_noblh",
+  "note": "Same model (weather without boundary layer height) scored with ERA5 target-hour weather vs archived forecasts issued 2 day(s) earlier (Open-Meteo Previous Runs API), on identical test rows.",
+  "rows": 765628,
+  "metrics": [
+    {
+      "model": "persistence",
+      "mae": 8.8631,
+      "rmse": 15.361,
+      "bias": 0.0252,
+      "n": 765628,
+      "mae_heating": 13.2752,
+      "mae_summer": 4.5358,
+      "episode_precision": 0.2596,
+      "episode_recall": 0.2595,
+      "episode_f1": 0.2596,
+      "episode_positives": 27174,
+      "skill_vs_persistence": 0.0
+    },
+    {
+      "model": "mean_24h",
+      "mae": 8.6829,
+      "rmse": 14.4664,
+      "bias": 0.0322,
+      "n": 765628,
+      "mae_heating": 13.0719,
+      "mae_summer": 4.3782,
+      "episode_precision": 0.2385,
+      "episode_recall": 0.1741,
+      "episode_f1": 0.2013,
+      "episode_positives": 27174,
+      "skill_vs_persistence": 0.0203
+    },
+    {
+      "model": "climatology",
+      "mae": 8.2906,
+      "rmse": 13.3243,
+      "bias": 1.0492,
+      "n": 765628,
+      "mae_heating": 12.1033,
+      "mae_summer": 4.5511,
+      "episode_precision": 0.3068,
+      "episode_recall": 0.0762,
+      "episode_f1": 0.122,
+      "episode_positives": 27174,
+      "skill_vs_persistence": 0.0646
+    },
+    {
+      "model": "lightgbm_era5_weather",
+      "mae": 5.8496,
+      "rmse": 10.4519,
+      "bias": -0.1779,
+      "n": 765628,
+      "mae_heating": 8.7172,
+      "mae_summer": 3.0371,
+      "episode_precision": 0.4865,
+      "episode_recall": 0.2744,
+      "episode_f1": 0.3509,
+      "episode_positives": 27174,
+      "skill_vs_persistence": 0.34
+    },
+    {
+      "model": "lightgbm_forecast_weather",
+      "mae": 6.4001,
+      "rmse": 10.9781,
+      "bias": 0.8355,
+      "n": 765628,
+      "mae_heating": 9.5974,
+      "mae_summer": 3.2642,
+      "episode_precision": 0.4256,
+      "episode_recall": 0.2924,
+      "episode_f1": 0.3467,
+      "episode_positives": 27174,
+      "skill_vs_persistence": 0.2779
+    }
+  ]
+}

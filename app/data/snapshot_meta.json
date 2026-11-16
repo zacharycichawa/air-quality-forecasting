@@ -1,11 +1,11 @@
 {
-  "exported_at": "2026-11-15T19:06:37.342899+00:00",
+  "exported_at": "2026-11-16T11:58:28.055129+00:00",
   "rows": {
-    "stations": 104,
-    "daily_pm25": 176737,
-    "monthly": 29281,
-    "forecasts_live": 50,
-    "backtest_winter": 484976,
-    "backtest_monthly_mae": 48
+    "stations": 135,
+    "daily_pm25": 210752,
+    "monthly": 33181,
+    "forecasts_live": 236,
+    "backtest_winter": 727464,
+    "backtest_monthly_mae": 72
   }
 }

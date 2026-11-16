@@ -67,6 +67,9 @@ def latest_issue_rows(feats: pd.DataFrame, now: pd.Timestamp) -> pd.DataFrame:
 
 def predict_live(engine: Engine, horizons: tuple[int, ...] = (24, 48),
                  use_weather: bool = False, now: pd.Timestamp | None = None) -> int:
+    """Issue live forecasts. The weather variant uses the model without boundary layer
+    height: its accuracy with real (archived) weather forecasts was measured, see
+    forecast/realistic.py, so the published numbers match what users get."""
     now = now or pd.Timestamp.now(tz="UTC").floor("h")
     since = now - pd.Timedelta(days=HISTORY_DAYS)
     hourly = _recent_hourly(engine, since)
@@ -74,12 +77,13 @@ def predict_live(engine: Engine, horizons: tuple[int, ...] = (24, 48),
     stations = load_stations(engine)
     total = 0
     for h in horizons:
-        name = experiment_name(h, use_weather)
+        name = experiment_name(h, use_weather, use_blh=False)
         meta, reg, clf = _load_models(name)
         feats = build_features(hourly, stations, h, weather, require_target=False)
         rows = latest_issue_rows(feats, now)
         cols = meta["features"]
-        assert cols == feature_columns(feats, use_weather), "feature set changed since training"
+        expected = feature_columns(feats, use_weather, use_blh=False)
+        assert cols == expected, "feature set changed since training"
         tf = TargetTransform(meta["target_transform"])
         out = pd.DataFrame({
             "model": "lightgbm", "run_type": "live",
@@ -100,7 +104,13 @@ def predict_live(engine: Engine, horizons: tuple[int, ...] = (24, 48),
 
 def load_backtests(engine: Engine, use_weather: bool = False,
                    horizons: tuple[int, ...] = (24, 48)) -> int:
-    """Copy saved test-year predictions (LightGBM + persistence) into `forecasts`."""
+    """Copy saved test-year predictions into `forecasts`.
+
+    No weather: LightGBM + persistence. Weather: the realistic evaluation's predictions
+    (model 'lightgbm_weather', fed with archived weather forecasts, not reanalysis).
+    """
+    if use_weather:
+        return _load_realistic_backtests(engine, horizons)
     total = 0
     for h in horizons:
         name = experiment_name(h, use_weather)
@@ -117,4 +127,20 @@ def load_backtests(engine: Engine, use_weather: bool = False,
             })
             total += upsert_forecasts(engine, out)
         log.info("%s: backtest predictions loaded", name)
+    return total
+
+
+def _load_realistic_backtests(engine: Engine, horizons: tuple[int, ...]) -> int:
+    total = 0
+    for h in horizons:
+        pred = pd.read_parquet(MODEL_DIR / f"test_predictions_h{h}_realistic.parquet")
+        out = pd.DataFrame({
+            "model": "lightgbm_weather", "run_type": "backtest",
+            "station_code": pred["station_code"].astype(str),
+            "issue_ts": pred["issue_ts"], "horizon_h": h, "target_ts": pred["target_ts"],
+            "predicted": pred["lightgbm_forecast_weather"].astype(float),
+            "p_episode": np.nan, "uses_weather": True,
+        })
+        total += upsert_forecasts(engine, out)
+        log.info("h%d realistic backtest predictions loaded", h)
     return total

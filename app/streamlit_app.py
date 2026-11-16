@@ -208,50 +208,81 @@ with tab_forecast:
                 })
 
 # ------------------------------------------------------------------ model performance
+MODEL_NAMES = {"persistence": "Persistence", "mean_24h": "24 h mean",
+               "climatology": "Climatology", "lightgbm": "LightGBM (history only)",
+               "lightgbm_weather": "LightGBM + weather forecast"}
+LINE_COLORS = {"LightGBM + weather forecast": BLUE, "LightGBM (history only)": "#86b6ef",
+               "Persistence": GREY}
+
+
+def comparison_table(metrics: dict) -> pd.DataFrame:
+    """Test-year MAE per model and horizon, from the saved experiment reports."""
+    rows = []
+    for h in (24, 48):
+        base, real = metrics.get(f"h{h}_noweather"), metrics.get(f"h{h}_realistic")
+        oracle = metrics.get(f"h{h}_weather")
+        if not base:
+            continue
+        recs = {r["model"]: r for r in base["metrics"]["test"]}
+        for key in ("persistence", "mean_24h", "climatology", "lightgbm"):
+            rows.append({"horizon": f"{h} h", "model": key, "mae": recs[key]["mae"],
+                         "skill": recs[key].get("skill_vs_persistence", 0.0)})
+        if real:
+            r = {x["model"]: x for x in real["metrics"]}["lightgbm_forecast_weather"]
+            rows.append({"horizon": f"{h} h", "model": "lightgbm_weather", "mae": r["mae"],
+                         "skill": r["skill_vs_persistence"]})
+        if oracle:
+            r = {x["model"]: x for x in oracle["metrics"]["test"]}["lightgbm"]
+            rows.append({"horizon": f"{h} h", "model": "perfect_weather", "mae": r["mae"],
+                         "skill": r["skill_vs_persistence"]})
+    out = pd.DataFrame(rows)
+    out["model_name"] = out["model"].map(
+        {**MODEL_NAMES, "perfect_weather": "Perfect weather (upper bound)"})
+    return out
+
+
 with tab_model:
     st.markdown(
         "LightGBM forecasts hourly PM2.5 at every station, 24 and 48 hours ahead. "
-        "Trained on 2019–2023, tuned on 2024, **tested once on 2025**. Its errors are "
-        "compared with simple baselines it must beat, e.g. *persistence* (\"same as now\").")
-    rows = []
-    for _, r in sorted(d["metrics"].items()):
-        for rec in r["metrics"]["test"]:
-            rows.append({"horizon": f"{r['horizon_hours']} h",
-                         "weather": "with weather" if r["use_weather"] else "no weather",
-                         **rec})
-    tbl = pd.DataFrame(rows)
-    names = {"persistence": "Persistence", "mean_24h": "24 h mean",
-             "climatology": "Climatology", "lightgbm": "LightGBM"}
-    tbl["model_name"] = tbl["model"].map(names)
+        "Trained on 2019–2023, tuned on 2024, **tested once on 2025**, and compared with "
+        "simple baselines it must beat, e.g. *persistence* (\"same as now\"). The weather "
+        "model is scored with **real archived weather forecasts** issued 1–2 days earlier, "
+        "exactly what would have been available at the time.")
+    tbl = comparison_table(d["metrics"])
+    order = list(tbl["model_name"].drop_duplicates())
+    colors = {"LightGBM + weather forecast": BLUE, "LightGBM (history only)": "#86b6ef",
+              "Perfect weather (upper bound)": "#e6effa"}
     base = alt.Chart().encode(
-        x=alt.X("model_name:N", sort=list(names.values()), title=None,
-                axis=alt.Axis(labelAngle=0)),
-        y=alt.Y("mae:Q", title="MAE, µg/m³ (lower is better)"),
+        y=alt.Y("model_name:N", sort=order, title=None, axis=alt.Axis(labelLimit=220)),
+        x=alt.X("mae:Q", title="MAE, µg/m³ (lower is better)"),
         tooltip=[alt.Tooltip("model_name:N", title="Model"),
                  alt.Tooltip("mae:Q", format=".2f", title="MAE"),
-                 alt.Tooltip("rmse:Q", format=".2f", title="RMSE"),
-                 alt.Tooltip("skill_vs_persistence:Q", format="+.0%",
-                             title="Skill vs persistence")])
-    bars = base.mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3, size=46).encode(
-        color=alt.condition("datum.model == 'lightgbm'", alt.value(BLUE), alt.value("#c3c2b7")))
-    labels = base.mark_text(dy=-7, fontSize=12).encode(text=alt.Text("mae:Q", format=".2f"))
-    facet = {"column": alt.Column("horizon:N", title=None,
-                                  header=alt.Header(labelFontSize=13, labelFontWeight="bold"))}
-    if tbl["weather"].nunique() > 1:
-        facet["row"] = alt.Row("weather:N", title=None)
-    st.altair_chart(alt.layer(bars, labels, data=tbl).properties(width=330, height=250)
-                    .facet(**facet))
+                 alt.Tooltip("skill:Q", format="+.0%", title="Better than persistence by")])
+    bars = base.mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3, size=22,
+                         stroke="#256abf", strokeWidth=0).encode(
+        color=alt.Color("model_name:N", legend=None, scale=alt.Scale(
+            domain=order, range=[colors.get(m, "#c3c2b7") for m in order])),
+        strokeWidth=alt.condition("datum.model == 'perfect_weather'", alt.value(1),
+                                  alt.value(0)))
+    labels = base.mark_text(dx=5, align="left", fontSize=12).encode(
+        text=alt.Text("mae:Q", format=".2f"))
+    st.altair_chart(alt.layer(bars, labels, data=tbl).properties(width=300, height=230)
+                    .facet(column=alt.Column("horizon:N", title=None, header=alt.Header(
+                        labelFontSize=13, labelFontWeight="bold"))))
+    st.caption("“Perfect weather” feeds the model the weather that actually happened "
+               "(ERA5 reanalysis). No real forecast is that good, so it's only an upper bound.")
 
     mm = d["backtest_monthly_mae"]
     h = st.radio("Horizon ", sorted(mm["horizon_h"].unique()), horizontal=True,
                  format_func=lambda x: f"{x} h")
-    mm = mm[mm["horizon_h"] == h].assign(model_name=lambda x: x["model"].map(names))
+    mm = mm[mm["horizon_h"] == h].assign(model_name=lambda x: x["model"].map(MODEL_NAMES))
     st.subheader("Error by month (test year 2025)")
     st.altair_chart(alt.Chart(mm).mark_line(point=True, strokeWidth=2).encode(
         x=alt.X("month:O", title="month"),
         y=alt.Y("mae:Q", title="MAE, µg/m³"),
-        color=alt.Color("model_name:N", title=None,
-                        scale=alt.Scale(domain=["LightGBM", "Persistence"], range=[BLUE, GREY])),
+        color=alt.Color("model_name:N", title=None, legend=alt.Legend(labelLimit=260),
+                        scale=alt.Scale(
+            domain=list(LINE_COLORS), range=list(LINE_COLORS.values()))),
         tooltip=["model_name:N", "month:O", alt.Tooltip("mae:Q", format=".2f")]
     ).properties(height=280), width="stretch")
 
@@ -265,18 +296,20 @@ with tab_model:
     wide = s.pivot_table(index="target_local", columns="model", values="predicted").reset_index()
     wide = wide.merge(s[["target_local", "actual"]].drop_duplicates(), on="target_local")
     long = wide.melt("target_local", var_name="series", value_name="pm25")
-    long["series"] = long["series"].map({"actual": "Measured", "lightgbm": "LightGBM",
-                                         "persistence": "Persistence"})
-    st.altair_chart(alt.Chart(long).mark_line(strokeWidth=1.6).encode(
+    long["series"] = long["series"].map({"actual": "Measured", **MODEL_NAMES})
+    domain = ["Measured", "LightGBM + weather forecast", "LightGBM (history only)", "Persistence"]
+    st.altair_chart(alt.Chart(long.dropna(subset=["series"])).mark_line(strokeWidth=1.6).encode(
         x=alt.X("target_local:T", title=None),
         y=alt.Y("pm25:Q", title="PM2.5 µg/m³"),
-        color=alt.Color("series:N", title=None, scale=alt.Scale(
-            domain=["Measured", "LightGBM", "Persistence"], range=[INK, BLUE, GREY])),
+        color=alt.Color("series:N", title=None, legend=alt.Legend(labelLimit=260),
+                        scale=alt.Scale(
+            domain=domain, range=[INK, BLUE, "#86b6ef", GREY])),
         strokeDash=alt.StrokeDash("series:N", legend=None, scale=alt.Scale(
-            domain=["Measured", "LightGBM", "Persistence"], range=[[1, 0], [1, 0], [4, 3]])),
+            domain=domain, range=[[1, 0], [1, 0], [1, 0], [4, 3]])),
         tooltip=[alt.Tooltip("target_local:T", format="%d %b %H:%M", title="Time"),
                  "series:N", alt.Tooltip("pm25:Q", format=".1f")]
     ).properties(height=320).interactive(bind_y=False), width="stretch")
     st.caption("Drag to pan and scroll to zoom. Persistence is the measured curve shifted by "
-               "the horizon, so it is always late. The model follows the level and daily "
-               "cycle but under-predicts sudden smog peaks.")
+               "the horizon, so it is always late. Weather forecasts help the model anticipate "
+               "when calm, cold air will trap pollution, although sudden peaks are still "
+               "under-predicted.")

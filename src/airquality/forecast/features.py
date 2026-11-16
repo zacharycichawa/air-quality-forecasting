@@ -61,14 +61,21 @@ def _history(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out, index=df.index)
 
 
-def _weather(df: pd.DataFrame, weather: pd.DataFrame, horizon: int) -> pd.DataFrame:
-    """Weather at the target hour t+h (forecast proxy) and at the issue time t."""
+def _weather(df: pd.DataFrame, weather: pd.DataFrame, horizon: int,
+             target_weather: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Weather at the target hour t+h and at the issue time t.
+
+    `target_weather` optionally supplies the target-hour values from another source,
+    e.g. archived forecasts issued h hours earlier, for a realistic evaluation. Variables
+    it lacks come out as NaN.
+    """
     w = weather.set_index(["station_code", "ts_utc"])
+    tw = w if target_weather is None else target_weather.set_index(["station_code", "ts_utc"])
     key_issue = pd.MultiIndex.from_arrays([df["station_code"].astype(str), df["ts_utc"]])
     key_target = pd.MultiIndex.from_arrays(
         [df["station_code"].astype(str), df["ts_utc"] + pd.Timedelta(hours=horizon)]
     )
-    at_target = w.reindex(key_target)
+    at_target = tw.reindex(key_target).reindex(columns=WEATHER_VARS)
     at_issue = w.reindex(key_issue)
     out = {f"wx_{c}": at_target[c].to_numpy() for c in TARGET_WEATHER}
     rad = np.radians(at_target["wind_direction_10m"].to_numpy())
@@ -89,6 +96,7 @@ def build_features(
     horizon: int,
     weather: pd.DataFrame | None = None,
     require_target: bool = True,
+    target_weather: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Return one row per (station, issue time) with features, `target` and metadata.
 
@@ -105,7 +113,7 @@ def build_features(
              pd.DataFrame({"target_ts": target_ts, "target": target}),
              _history(df), _calendar(target_ts)]
     if weather is not None:
-        parts.append(_weather(df, weather, horizon))
+        parts.append(_weather(df, weather, horizon, target_weather))
     feats = pd.concat(parts, axis=1)
 
     keep = feats["pm25_lag0"].notna()
@@ -122,10 +130,17 @@ def build_features(
 META_COLS = ["station_code", "issue_ts", "target_ts", "target"]
 
 
-def feature_columns(feats: pd.DataFrame, use_weather: bool) -> list[str]:
+BLH_FEATURES = ["wx_boundary_layer_height", "wx_blh_issue"]
+
+
+def feature_columns(feats: pd.DataFrame, use_weather: bool, use_blh: bool = True) -> list[str]:
+    """Model inputs. `use_blh=False` drops boundary layer height, which archived lead-time
+    forecasts don't provide (needed for the realistic evaluation)."""
     cols = [c for c in feats.columns if c not in META_COLS]
     if not use_weather:
         cols = [c for c in cols if not c.startswith("wx_")]
+    elif not use_blh:
+        cols = [c for c in cols if c not in BLH_FEATURES]
     return cols
 
 

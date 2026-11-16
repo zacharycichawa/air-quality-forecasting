@@ -24,21 +24,26 @@ only with at least 18 hourly values.
 A LightGBM gradient-boosting model forecasts hourly PM2.5 at each station 24 and 48
 hours ahead (one model per horizon). Its inputs are recent PM2.5 values and averages
 (last hours, last day, last week), recent PM10 and NO2, the hour, weekday and month of
-the target time, and station location. A weather variant also uses the weather
-forecast for the target hour. The model was trained on 2019–2023, tuned on 2024 and
-tested once on 2025.
+the target time, station location, and the weather forecast for the target hour
+(temperature, wind, humidity, pressure, precipitation and cloud cover). The model was
+trained on 2019-2023, tuned on 2024 and tested once on 2025.
 
 ## How good the forecast is
 
-On the 2025 test year, without weather features, the mean absolute error (MAE) was
-6.55 µg/m³ at 24 hours (persistence baseline: 7.72) and 7.13 µg/m³ at 48 hours
-(persistence: 8.86), i.e. 15 % and 20 % better than assuming tomorrow equals today. The
-main weakness is severe smog: above 50 µg/m³ the model under-predicts and is worse than
-persistence, because without weather information it cannot anticipate an inversion.
+The model was tested on 2025 using real archived weather forecasts issued 1-2 days
+earlier, i.e. exactly what would have been available at the time. Its mean absolute
+error (MAE) was 6.15 µg/m³ at 24 hours and 6.40 µg/m³ at 48 hours, compared with 7.72
+and 8.86 µg/m³ for the persistence baseline ("tomorrow equals today"): 20 % and 28 %
+better. Without weather information the errors were 6.55 and 7.13 µg/m³. With perfect
+knowledge of the weather (an unrealistic upper bound) they would be about 5.3 and 5.6.
+
+The model is most useful on polluted days: above 35 µg/m³ it is clearly better than
+the alternatives. It still under-predicts the most severe smog peaks, and on clean days
+it sometimes over-predicts when the forecast weather looks smog-prone.
 
 ## Smog alert probability
 
 A separate classifier estimates the probability that PM2.5 exceeds 50 µg/m³ at the
-target hour. With its alert cut-off chosen on 2024 data, it caught about half of all
-high-pollution hours in 2025 (F1 0.40 at 24 hours, versus 0.35 for the rule "it is
-above 50 now").
+target hour. From pollution history alone, it caught about half of all high-pollution
+hours in 2025 (F1 0.40 at 24 hours, versus 0.35 for the rule "it is above 50 now").
+Weather information improves it further.

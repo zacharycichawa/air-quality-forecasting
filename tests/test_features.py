@@ -110,3 +110,26 @@ def test_latest_issue_rows_skips_stale_stations():
     rows = latest_issue_rows(f, now=hourly.ts_utc.max())
     assert rows["station_code"].astype(str).tolist() == ["A"]
     assert rows["issue_ts"].item() == hourly.ts_utc.max()
+
+
+def test_target_weather_source_overrides_only_the_target_hour():
+    hourly = hourly_two_stations(100)
+    ts = pd.date_range(T0, periods=200, freq="h")
+    era5 = pd.DataFrame({"station_code": "A", "ts_utc": ts})
+    for v in WEATHER_VARS:
+        era5[v] = 1.0
+    forecast = era5[["station_code", "ts_utc", "temperature_2m"]].assign(temperature_2m=5.0)
+    f = build_features(hourly, STATIONS, 24, weather=era5, target_weather=forecast)
+    a = f[f.station_code == "A"].dropna(subset=["wx_temperature_2m"])
+    assert (a["wx_temperature_2m"] == 5.0).all()          # target hour from the forecast
+    assert (a["wx_temp_change"] == 4.0).all()             # forecast(target) - ERA5(issue)
+    assert a["wx_boundary_layer_height"].isna().all()     # not in the forecast source
+    assert (a["wx_blh_issue"] == 1.0).all()               # issue time still from ERA5
+
+
+def test_feature_columns_can_drop_boundary_layer_height():
+    f = build_features(hourly_two_stations(100), STATIONS, 24, weather=pd.DataFrame(
+        {"station_code": ["A"], "ts_utc": [T0], **{v: [1.0] for v in WEATHER_VARS}}))
+    with_blh = feature_columns(f, use_weather=True)
+    without = feature_columns(f, use_weather=True, use_blh=False)
+    assert set(with_blh) - set(without) == {"wx_boundary_layer_height", "wx_blh_issue"}

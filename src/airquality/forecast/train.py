@@ -36,16 +36,18 @@ MODEL_DIR = PROJECT_ROOT / "models"
 METRICS_DIR = PROJECT_ROOT / "reports" / "metrics"
 
 
-def experiment_name(horizon: int, use_weather: bool) -> str:
-    return f"h{horizon}_{'weather' if use_weather else 'noweather'}"
+def experiment_name(horizon: int, use_weather: bool, use_blh: bool = True) -> str:
+    base = f"h{horizon}_{'weather' if use_weather else 'noweather'}"
+    return base + ("_noblh" if use_weather and not use_blh else "")
 
 
 def run_experiment(
     engine: Engine, horizon: int, use_weather: bool, split: Split | None = None,
     transforms: tuple[str, ...] = ("log", "raw"), refresh_cache: bool = False,
+    use_blh: bool = True,
 ) -> dict:
     split = split or Split()
-    name = experiment_name(horizon, use_weather)
+    name = experiment_name(horizon, use_weather, use_blh)
     t0 = time.time()
 
     hourly = load_hourly(engine, refresh=refresh_cache)
@@ -56,12 +58,23 @@ def run_experiment(
         # Keep only rows where target-hour weather exists, so the comparison with the
         # no-weather model (scored on the same rows) is fair.
         feats = feats[feats["wx_temperature_2m"].notna()].reset_index(drop=True)
-    cols = feature_columns(feats, use_weather)
+    cols = feature_columns(feats, use_weather, use_blh)
     masks = split.masks(feats)
     log.info("%s: %d feature rows, %d features (%.0fs)", name, len(feats), len(cols),
              time.time() - t0)
 
     train, val, test = (feats[masks[k]] for k in ("train", "val", "test"))
+    val_note = None
+    if use_weather and use_blh:
+        # ERA5 has no boundary layer height for Jan-Jun 2024 (half the validation year),
+        # while training years and production forecasts always have it. Validating on
+        # those rows made early stopping halt after ~25 trees, so model selection uses
+        # only validation rows with complete weather (Jul-Dec 2024).
+        n_before = len(val)
+        val = val[val["wx_boundary_layer_height"].notna()]
+        val_note = (f"validation restricted to rows with boundary layer height: "
+                    f"{len(val)} of {n_before} (ERA5 gap Jan-Jun 2024)")
+        log.info("%s: %s", name, val_note)
     clim = fit_climatology(train)
 
     # Choose the target transform by validation MAE (test set untouched).
@@ -104,10 +117,12 @@ def run_experiment(
         "experiment": name,
         "horizon_hours": horizon,
         "use_weather": use_weather,
+        "use_blh": use_weather and use_blh,
         "weather_note": ("target-hour weather = ERA5 reanalysis (perfect-forecast proxy)"
                          if use_weather else None),
         "split": split.__dict__,
         "rows": {k: int(m.sum()) for k, m in masks.items()},
+        "val_note": val_note,
         "features": cols,
         "target_transform": best_kind,
         "val_mae_by_transform": {k: v[0] for k, v in candidates.items()},

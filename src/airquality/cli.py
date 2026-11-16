@@ -258,12 +258,24 @@ def train_forecast(
     ctx: typer.Context,
     horizon: Annotated[int, typer.Option(help="Forecast horizon in hours.")] = 24,
     weather: Annotated[bool, typer.Option(help="Use target-hour weather features.")] = False,
+    blh: Annotated[bool, typer.Option(help="Include boundary layer height (weather).")] = True,
     refresh_cache: Annotated[bool, typer.Option(help="Re-extract data from PostgreSQL.")] = False,
 ) -> None:
     """Train and evaluate the PM2.5 forecaster (baselines + LightGBM) for one horizon."""
     from airquality.forecast.train import run_experiment
 
-    run_experiment(_engine(ctx), horizon, weather, refresh_cache=refresh_cache)
+    run_experiment(_engine(ctx), horizon, weather, refresh_cache=refresh_cache, use_blh=blh)
+
+
+@app.command("eval-realistic")
+def eval_realistic(
+    ctx: typer.Context,
+    horizon: Annotated[int, typer.Option(help="Forecast horizon in hours (24 or 48).")] = 24,
+) -> None:
+    """Score the weather model with real archived weather forecasts instead of ERA5."""
+    from airquality.forecast.realistic import evaluate_realistic
+
+    evaluate_realistic(_engine(ctx), horizon)
 
 
 @app.command()
