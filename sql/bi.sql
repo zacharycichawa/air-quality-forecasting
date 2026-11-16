@@ -1,4 +1,4 @@
--- BI layer: a small star schema for Power BI (or any BI tool). Idempotent.
+-- BI layer: a small star schema for dashboards and the assistant. Idempotent.
 -- Dimensions: bi.dim_station, bi.dim_date, bi.dim_threshold
 -- Facts:      bi.fact_daily_air_quality (valid daily means), bi.fact_forecast (hourly
 --             forecasts joined to what was actually measured)

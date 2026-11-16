@@ -3,7 +3,7 @@
 An end-to-end data project on air pollution in Poland. It collects official hourly
 measurements from the national monitoring network (GIOŚ) and weather data into a
 PostgreSQL warehouse, analyses seven years of smog, forecasts PM2.5 24 and 48 hours
-ahead at every station, and serves the results through interactive dashboards and a
+ahead at every station, and serves the results through an interactive dashboard and a
 local LLM assistant that answers questions in English or Polish.
 
 **Live demo:** [open the dashboard on Streamlit Community Cloud](https://air-quality-forecasting-9jvwnwva3kgntaijidn3qv.streamlit.app/)
@@ -16,8 +16,8 @@ local LLM assistant that answers questions in English or Polish.
 - **A local AI assistant**: text-to-SQL, live forecasts and retrieval over WHO/EU
   guidelines. It scores **92 % on a held-out test set** and works through a
   read-only database role.
-- **Dashboards:** a Streamlit app (map, station explorer, live forecasts, model
-  performance) and a Power BI-ready star schema.
+- **A live dashboard:** a Streamlit app (map, station explorer, live forecasts, model
+  performance) on top of a star schema in PostgreSQL.
 
 ![Streamlit app: national overview](reports/figures/app_overview.png)
 
@@ -28,7 +28,7 @@ local LLM assistant that answers questions in English or Polish.
 | Data pipeline | GIOŚ yearly archives + REST API and Open-Meteo weather → PostgreSQL, idempotent and resumable | [src/airquality/ingest](src/airquality/ingest), [sql/schema.sql](sql/schema.sql) |
 | Analysis | Data quality, trends against WHO/EU standards, seasonal and daily cycles, geography, weather drivers | [notebooks/01_eda.ipynb](notebooks/01_eda.ipynb) |
 | Forecasting | LightGBM 24/48 h forecasts, smog-alert classifier, realistic evaluation | [src/airquality/forecast](src/airquality/forecast), [notebooks/02_forecasting.ipynb](notebooks/02_forecasting.ipynb) |
-| Dashboards | Streamlit app; `bi` star schema and Power BI guide | [app/](app), [sql/bi.sql](sql/bi.sql), [docs/powerbi_guide.md](docs/powerbi_guide.md) |
+| Dashboard | Streamlit app on a `bi` star schema | [app/](app), [sql/bi.sql](sql/bi.sql) |
 | AI assistant | Local LLM (Qwen2.5 7B via Ollama) with SQL, forecast and RAG tools, plus an evaluation suite | [src/airquality/assistant](src/airquality/assistant), [evals/](evals) |
 
 ## Air quality in Poland, 2019–2025
@@ -107,17 +107,16 @@ station updates, scored 12/12, but the first run is the honest figure. Median an
 time is about 11 seconds. `streamlit run app/assistant_app.py` opens a
 chat window that shows every tool call and SQL query behind each answer.
 
-## Dashboards
+## Dashboard
 
 - **Streamlit app** ([live](https://air-quality-forecasting-9jvwnwva3kgntaijidn3qv.streamlit.app/),
   [app/streamlit_app.py](app/streamlit_app.py)) has four tabs:
   national overview with a station map, station explorer, live forecasts with smog-alert
   probabilities, and model performance. It reads a 2 MB Parquet snapshot instead of the
   database, so it can be deployed on Streamlit Community Cloud as is.
-- **Power BI.** The `bi` schema is a star schema with station, date and threshold
-  dimensions, plus daily air-quality and forecast-vs-actual facts in Polish local time.
-  [docs/powerbi_guide.md](docs/powerbi_guide.md) covers the connection, relationships,
-  DAX measures and report pages.
+- **Star schema.** The `bi` schema has station, date and threshold dimensions, plus
+  daily air-quality and forecast-vs-actual facts in Polish local time. The assistant
+  queries it, and any BI tool can connect to it.
 
 ![Model performance tab](reports/figures/app_model_performance.png)
 
@@ -129,7 +128,7 @@ GIOŚ REST API ───────────────┼──▶ ingesti
 Open-Meteo ERA5 + forecasts ─┘   upserts, watermarks,     measurements,                           │
                                  retries, quotas          weather, forecasts                      │
                                                                 ▲                                 ▼
-                         LightGBM training + live forecasts ────┘          Streamlit · Power BI · LLM assistant
+                         LightGBM training + live forecasts ────┘          Streamlit app · LLM assistant
 ```
 
 Everything runs from one command-line tool (`airquality --help`), and every load is
@@ -182,7 +181,7 @@ airquality train-forecast --horizon 24 --weather --no-blh   # also --horizon 48;
 airquality eval-realistic --horizon 24                      # score with archived forecasts
 airquality predict --weather                                # live 24/48 h forecasts
 
-# dashboards and assistant
+# dashboard and assistant
 airquality export-snapshot && streamlit run app/streamlit_app.py
 airquality build-index && airquality ask "Which city had the cleanest air in 2023?"
 ```
@@ -194,7 +193,7 @@ Run the tests with `pytest`. The integration tests need a PostgreSQL database na
 
 ```
 app/                Streamlit dashboard (+ data snapshot) and assistant chat UI
-docs/               data-source notes, Power BI guide, assistant knowledge base
+docs/               data-source notes, assistant knowledge base
 evals/              assistant evaluation sets
 notebooks/          analysis and forecasting notebooks (paired .py / .ipynb)
 reports/            figures and metrics
